@@ -1,0 +1,41 @@
+{
+  "name": "kotak-job-crawler",
+  "version": "1.0.0",
+  "description": "Scalable web crawler for fetching job listings from Kotak career pages",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "lint": "eslint src/",
+    "format": "prettier --write src/"
+  },
+  "keywords": [
+    "web-crawler",
+    "job-scraper",
+    "kotak",
+    "nodejs"
+  ],
+  "author": "System Design Team",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "ioredis": "^5.3.2",
+    "mongodb": "^6.3.0",
+    "puppeteer": "^21.6.0",
+    "winston": "^3.11.0",
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.1",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.55.0",
+    "prettier": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
