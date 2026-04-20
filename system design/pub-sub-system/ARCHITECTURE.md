@@ -1,0 +1,228 @@
+# Pub-Sub System Architecture
+
+## Problem Statement
+Design a Publisher-Subscriber system where:
+- **Producers** can publish messages to topics
+- **Subscribers** can subscribe to topics and receive messages
+- System must handle concurrent operations safely (multithreading)
+
+## High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Pub-Sub System                              │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌──────────────┐     ┌──────────────────┐     ┌──────────────┐     │
+│  │  Publisher 1 │────▶│                  │◀────│ Publisher 2  │     │
+│  └──────────────┘     │   Topic Manager   │     └──────────────┘     │
+│                       │                  │                           │
+│                       │  ┌────────────┐  │                           │
+│                       │  │  Topic A   │  │                           │
+│                       │  │  Topic B   │  │                           │
+│                       │  │  Topic C   │  │                           │
+│                       │  └────────────┘  │                           │
+│                       └────────┬─────────┘                           │
+│                                │                                      │
+│              ┌─────────────────┼─────────────────┐                    │
+│              ▼                 ▼                 ▼                    │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐      │
+│  │ Subscriber Group │ │ Subscriber Group │ │ Subscriber Group │      │
+│  │    (Topic A)     │ │    (Topic B)     │ │    (Topic C)     │      │
+│  │  ┌────────────┐  │ │  ┌────────────┐  │ │  ┌────────────┐  │      │
+│  │  │  Sub 1     │  │ │  │  Sub 3     │  │ │  │  Sub 5     │  │      │
+│  │  │  Sub 2     │  │ │  │  Sub 4     │  │ │  │            │  │      │
+│  │  └────────────┘  │ │  └────────────┘  │ │  └────────────┘  │      │
+│  └──────────────────┘ └──────────────────┘ └──────────────────┘      │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## Core Components
+
+### 1. Message
+```
+Message {
+    id: string (unique)
+    topic: string
+    payload: any
+    timestamp: datetime
+    metadata: map
+}
+```
+
+### 2. Topic
+```
+Topic {
+    name: string
+    subscribers: List<Subscriber>
+    messageQueue: BlockingQueue<Message>
+    lock: ReadWriteLock
+}
+```
+
+### 3. Subscriber
+```
+Subscriber {
+    id: string
+    topic: string
+    messageQueue: BlockingQueue<Message>
+    isActive: boolean
+}
+```
+
+### 4. Publisher
+```
+Publisher {
+    id: string
+    topicManager: TopicManager
+}
+```
+
+### 5. TopicManager (Broker)
+```
+TopicManager {
+    topics: ConcurrentHashMap<string, Topic>
+    topicLock: ReadWriteLock
+    executorService: ThreadPoolExecutor
+}
+```
+
+## Threading Model
+
+### Thread Pools
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Thread Pool Architecture                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │           Publisher Thread Pool (Fixed Size)              │   │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │   │
+│  │  │ Thread 1│ │ Thread 2│ │ Thread 3│ │ Thread 4│         │   │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │        Dispatcher Thread Pool (Cached/Scalable)          │   │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ...     │   │
+│  │  │Dispatch1│ │Dispatch2│ │Dispatch3│ │Dispatch4│        │   │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │          Subscriber Thread Pool (Per Subscriber)          │   │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │   │
+│  │  │ Sub T1  │ │ Sub T2  │ │ Sub T3  │ │ Sub T4  │         │   │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Concurrency Considerations
+
+### 1. Thread-Safe Data Structures
+| Data Structure | Purpose | Thread-Safety Mechanism |
+|---------------|---------|------------------------|
+| ConcurrentHashMap | Topics registry | Lock striping |
+| BlockingQueue | Message queues | Internal locking |
+| ReadWriteLock | Topic operations | Read/Write separation |
+| AtomicBoolean | Subscriber state | CAS operations |
+
+### 2. Synchronization Points
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│                    Synchronization Points                     │
+├───────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Topic Registration/Deregistration                          │
+│     └─▶ Write Lock on TopicManager                             │
+│                                                                │
+│  2. Subscriber Registration                                     │
+│     └─▶ Write Lock on specific Topic                           │
+│                                                                │
+│  3. Message Publishing                                          │
+│     └─▶ Read Lock on Topic + Lock-free queue operations        │
+│                                                                │
+│  4. Message Consumption                                         │
+│     └─▶ BlockingQueue.take() - blocking per subscriber         │
+│                                                                │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### 3. Deadlock Prevention
+- **Lock Ordering**: Always acquire locks in order: TopicManager → Topic → Subscriber
+- **Timeout**: Use tryLock with timeout to prevent indefinite blocking
+- **Lock Downgrading**: Never downgrade locks (write → read without releasing)
+
+## Message Flow
+
+```
+┌─────────┐    ┌─────────────┐    ┌───────────┐    ┌─────────────┐
+│Publisher│───▶│TopicManager │───▶│   Topic   │───▶│MessageQueue │
+└─────────┘    └─────────────┘    └───────────┘    └──────┬──────┘
+                                                              │
+                   ┌──────────────────────────────────────────┘
+                   │
+                   ▼
+           ┌───────────────┐
+           │  Dispatcher   │ (Thread Pool)
+           └───────┬───────┘
+                   │
+        ┌──────────┼──────────┐
+        ▼          ▼          ▼
+   ┌─────────┐ ┌─────────┐ ┌─────────┐
+   │ Sub 1   │ │ Sub 2   │ │ Sub 3   │
+   │ Queue   │ │ Queue   │ │ Queue   │
+   └────┬────┘ └────┬────┘ └────┬────┘
+        │          │          │
+        ▼          ▼          ▼
+   ┌─────────┐ ┌─────────┐ ┌─────────┐
+   │Sub 1    │ │Sub 2    │ │Sub 3    │
+   │Consumer │ │Consumer │ │Consumer │
+   └─────────┘ └─────────┘ └─────────┘
+```
+
+## Delivery Semantics
+
+### At-Most-Once (Fire and Forget)
+- Fastest, no acknowledgment
+- Messages may be lost
+
+### At-Least-Once
+- Subscriber acknowledges after processing
+- May have duplicates, requires idempotency
+
+### Exactly-Once
+- Requires transaction support
+- Most complex, highest overhead
+
+## Scalability Considerations
+
+### Horizontal Scaling
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Load Balancer                            │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        ▼             ▼             ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+│  Broker Node  │ │  Broker Node  │ │  Broker Node  │
+│      (1)      │ │      (2)      │ │      (3)      │
+└───────────────┘ └───────────────┘ └───────────────┘
+        │             │             │
+        └─────────────┼─────────────┘
+                      ▼
+              ┌───────────────┐
+              │ Distributed   │
+              │ Storage/Log   │
+              └───────────────┘
+```
+
+### Partitioning Strategy
+- Partition topics across multiple broker nodes
+- Consistent hashing for topic-to-broker mapping
+- Replication for fault tolerance

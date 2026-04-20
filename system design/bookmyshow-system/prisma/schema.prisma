@@ -1,0 +1,370 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER MANAGEMENT ====================
+
+enum UserRole {
+  CUSTOMER
+  THEATER_OWNER
+  ADMIN
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  phone         String?  @unique
+  passwordHash  String   @map("password_hash")
+  salt          String
+  role          UserRole @default(CUSTOMER)
+  isVerified    Boolean  @default(false) @map("is_verified")
+  isActive      Boolean  @default(true) @map("is_active")
+  lastLogin     DateTime? @map("last_login")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  theaters      Theater[]
+  bookings      Booking[]
+  payments      Payment[]
+  notifications Notification[]
+  seatLocks     SeatLock[]
+
+  @@map("users")
+}
+
+// ==================== THEATER MANAGEMENT ====================
+
+enum ScreenType {
+  TWO_D
+  THREE_D
+  IMAX
+  IMAX_3D
+}
+
+enum SeatType {
+  NORMAL
+  PREMIUM
+  RECLINER
+}
+
+model Theater {
+  id        String   @id @default(uuid())
+  name      String
+  city      String
+  address   String
+  latitude  Float
+  longitude Float
+  phone     String?
+  ownerId   String   @map("owner_id")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  owner   User      @relation(fields: [ownerId], references: [id])
+  screens Screen[]
+  shows   Show[]
+
+  @@index([city])
+  @@index([latitude, longitude])
+  @@map("theaters")
+}
+
+model Screen {
+  id          String     @id @default(uuid())
+  theaterId   String     @map("theater_id")
+  name        String
+  totalSeats  Int        @map("total_seats")
+  screenType  ScreenType @map("screen_type")
+  seatLayout  Json       @map("seat_layout")
+  isActive    Boolean    @default(true) @map("is_active")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  theater Theater @relation(fields: [theaterId], references: [id])
+  seats  Seat[]
+  shows  Show[]
+
+  @@index([theaterId])
+  @@map("screens")
+}
+
+model Seat {
+  id         String   @id @default(uuid())
+  screenId   String   @map("screen_id")
+  rowNumber  Int      @map("row_number")
+  seatNumber Int      @map("seat_number")
+  seatType   SeatType @map("seat_type")
+  isActive   Boolean  @default(true) @map("is_active")
+
+  // Relations
+  screen    Screen      @relation(fields: [screenId], references: [id])
+  showSeats ShowSeat[]
+
+  @@unique([screenId, rowNumber, seatNumber])
+  @@index([screenId])
+  @@map("seats")
+}
+
+// ==================== MOVIE MANAGEMENT ====================
+
+model Movie {
+  id              String   @id @default(uuid())
+  title           String
+  description     String?
+  durationMinutes Int      @map("duration_minutes")
+  genre           String
+  language        String
+  releaseDate     DateTime  @map("release_date")
+  posterUrl       String?   @map("poster_url")
+  rating          Decimal  @default(0) @db.Decimal(3, 1)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  shows Show[]
+
+  @@index([genre])
+  @@index([language])
+  @@index([releaseDate])
+  @@map("movies")
+}
+
+// ==================== SHOW MANAGEMENT ====================
+
+enum ShowStatus {
+  SCHEDULED
+  OPEN_FOR_BOOKING
+  BOOKING_CLOSED
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+model Show {
+  id         String     @id @default(uuid())
+  movieId    String     @map("movie_id")
+  screenId   String     @map("screen_id")
+  theaterId  String     @map("theater_id")
+  startTime  DateTime   @map("start_time")
+  endTime    DateTime   @map("end_time")
+  basePrice  Decimal    @map("base_price") @db.Decimal(10, 2)
+  status     ShowStatus @default(SCHEDULED)
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  movie    Movie      @relation(fields: [movieId], references: [id])
+  screen   Screen     @relation(fields: [screenId], references: [id])
+  theater  Theater    @relation(fields: [theaterId], references: [id])
+  showSeats ShowSeat[]
+  bookings  Booking[]
+
+  @@index([movieId])
+  @@index([theaterId])
+  @@index([startTime])
+  @@index([status])
+  @@map("shows")
+}
+
+// ==================== SEAT MANAGEMENT ====================
+
+enum SeatStatus {
+  AVAILABLE
+  LOCKED
+  BOOKED
+}
+
+model ShowSeat {
+  id        String     @id @default(uuid())
+  showId    String     @map("show_id")
+  seatId    String     @map("seat_id")
+  status    SeatStatus @default(AVAILABLE)
+  price     Decimal    @db.Decimal(10, 2)
+  lockedBy  String?    @map("locked_by")
+  lockedAt  DateTime?  @map("locked_at")
+  lockExpiry DateTime? @map("lock_expiry")
+  bookingId String?    @map("booking_id")
+
+  // Relations
+  show    Show     @relation(fields: [showId], references: [id])
+  seat    Seat     @relation(fields: [seatId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id])
+
+  @@unique([showId, seatId])
+  @@index([showId])
+  @@index([status])
+  @@map("show_seats")
+}
+
+// ==================== BOOKING MANAGEMENT ====================
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+model Booking {
+  id            String        @id @default(uuid())
+  userId        String         @map("user_id")
+  showId        String         @map("show_id")
+  totalAmount   Decimal        @map("total_amount") @db.Decimal(10, 2)
+  status        BookingStatus  @default(PENDING)
+  paymentStatus PaymentStatus  @default(PENDING) @map("payment_status")
+  bookedAt      DateTime       @default(now()) @map("booked_at")
+  expiresAt     DateTime?      @map("expires_at")
+  cancelledAt   DateTime?      @map("cancelled_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  user    User      @relation(fields: [userId], references: [id])
+  show    Show      @relation(fields: [showId], references: [id])
+  seats   ShowSeat[]
+  payment Payment?
+  tickets Ticket[]
+
+  @@index([userId])
+  @@index([showId])
+  @@index([status])
+  @@map("bookings")
+}
+
+// ==================== PAYMENT MANAGEMENT ====================
+
+model Payment {
+  id                   String        @id @default(uuid())
+  bookingId            String        @unique @map("booking_id")
+  amount               Decimal       @db.Decimal(10, 2)
+  currency             String        @default("INR")
+  status               PaymentStatus @default(PENDING)
+  paymentGateway       String?       @map("payment_gateway")
+  gatewayTransactionId String?       @map("gateway_transaction_id")
+  gatewayResponse      Json?         @map("gateway_response")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("payments")
+}
+
+// ==================== TICKET MANAGEMENT ====================
+
+enum TicketStatus {
+  ACTIVE
+  USED
+  CANCELLED
+}
+
+model Ticket {
+  id           String       @id @default(uuid())
+  bookingId    String       @map("booking_id")
+  showSeatId   String       @map("show_seat_id")
+  qrCode       String?      @map("qr_code")
+  ticketNumber String       @unique @map("ticket_number")
+  status       TicketStatus @default(ACTIVE)
+  issuedAt     DateTime     @default(now()) @map("issued_at")
+  usedAt       DateTime?    @map("used_at")
+
+  // Relations
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+  @@index([ticketNumber])
+  @@map("tickets")
+}
+
+// ==================== SEAT LOCK MANAGEMENT ====================
+
+enum LockStatus {
+  ACTIVE
+  RELEASED
+  EXPIRED
+  CONFIRMED
+}
+
+model SeatLock {
+  id         String     @id @default(uuid())
+  showId     String     @map("show_id")
+  seatIds    String[]   @map("seat_ids")
+  userId     String     @map("user_id")
+  lockedAt   DateTime   @default(now()) @map("locked_at")
+  expiresAt  DateTime   @map("expires_at")
+  status     LockStatus @default(ACTIVE)
+  amount     Decimal    @db.Decimal(10, 2)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([showId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("seat_locks")
+}
+
+// ==================== NOTIFICATION MANAGEMENT ====================
+
+enum NotificationType {
+  BOOKING_CONFIRMATION
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  SHOW_REMINDER
+  CANCELLATION
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model Notification {
+  id          String             @id @default(uuid())
+  userId      String             @map("user_id")
+  type        NotificationType
+  channel     NotificationChannel
+  status      NotificationStatus @default(PENDING)
+  content     Json
+  scheduledAt DateTime           @map("scheduled_at")
+  sentAt      DateTime?          @map("sent_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("notifications")
+}

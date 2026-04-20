@@ -1,0 +1,31 @@
+{
+  "name": "user-signup-system",
+  "version": "1.0.0",
+  "description": "Race-condition-safe user signup system with distributed locking",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "signup",
+    "race-condition",
+    "distributed-lock",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ioredis": "^5.3.2",
+    "uuid": "^9.0.0",
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0",
+    "redlock": "^5.0.0-beta.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0"
+  }
+}
