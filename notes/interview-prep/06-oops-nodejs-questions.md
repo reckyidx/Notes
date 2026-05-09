@@ -10,7 +10,8 @@
 4. [Encapsulation](#encapsulation)
 5. [Polymorphism](#polymorphism)
 6. [Design Patterns](#design-patterns)
-7. [Complex Scenarios](#complex-scenarios)
+7. [Senior Node.js OOP / Industry Expectations](#senior-nodejs-oop--industry-expectations)
+8. [Complex Scenarios](#complex-scenarios)
 
 ---
 
@@ -1418,6 +1419,68 @@ const userService = container.resolve('userService');
 ```
 
 ---
+
+## Senior Node.js OOP / Industry Expectations
+
+### Q6: For a 10+ year Node.js developer, when is OOP the right choice and when should you choose composition instead?
+
+**Answer:**
+
+- Senior Node developers are expected to choose the right abstraction for the problem. In server-side Node, OOP is useful for domain entities, service classes, adapters, and resource managers where encapsulating state and behavior improves maintainability.
+- Prefer composition for middleware, request handlers, transformer pipelines, and cross-cutting concerns. Composition is often safer than deep inheritance in long-running Node processes.
+- Industry expectation: use classes when you need:
+  - encapsulated state with private fields or closures,
+  - clearly defined life cycle and initialization,
+  - multiple related behaviors on an object,
+  - polymorphic adapters for storage, transport, or plugin systems.
+- Use plain objects / functions when you need low overhead, minimal state, or simple data transformation.
+
+### Q7: How would you model domain entities and services in a Node.js backend using OOP?
+
+**Answer:**
+
+- Model domain entities as classes or value objects with validation and behavior, not just data containers.
+- Use repositories or data mappers for persistence, keeping domain logic separate from DB access.
+- Keep service classes focused on one responsibility: orchestration, business use cases, or transactional workflows.
+- Build classes that expose explicit public methods and hide implementation details with private fields or module scope.
+- Example patterns:
+  - `UserEntity`, `OrderEntity`, and `ProductEntity` for aggregates
+  - `UserRepository`, `OrderRepository` for data access
+  - `PaymentService`, `AuthService`, `NotificationService` for business orchestration
+- Industry note: senior developers should be able to explain why this improves testability, traceability, and refactorability.
+
+### Q8: What are the common Node.js-specific OOP pitfalls and how do you avoid them?
+
+**Answer:**
+
+- Memory leaks from retained closures, event listeners, timers, or global caches. Always remove listeners and clean up resources in long-lived services.
+- Overusing class inheritance. Favor composition and mixins for reusable behavior, especially when building HTTP services or plugin systems.
+- Mutating shared objects across modules. Use immutability or defensive copying for class state that may be used by concurrent requests.
+- Mixing synchronous and asynchronous logic inside class constructors. Prefer explicit async initialization methods like `init()` rather than doing async work in constructors.
+- Industry-level expectation: be able to identify and fix a leaking class-based service that keeps references alive across requests.
+
+### Q9: How do you design class-based async workflows and resource management in Node.js?
+
+**Answer:**
+
+- Encapsulate async setup/teardown using methods such as `initialize()`, `connect()`, `shutdown()`.
+- Use `EventEmitter` or observables when a class must emit domain events, but avoid coupling to global emitter instances.
+- Keep stateful resources inside the class and expose clear lifecycle hooks:
+  - `start()` / `stop()` for listeners or intervals
+  - `acquire()` / `release()` for DB/client connections
+  - `dispose()` for timer cleanup
+- Example: `CacheService`, `QueueListener`, `StreamingProcessor`.
+- Industry expectation: senior candidates should explain how to prevent uncaught promise rejections and how class state interacts with Node's event loop.
+
+### Q10: What do interviewers expect from a senior Node.js developer when discussing OOP and architecture?
+
+**Answer:**
+
+- Explain tradeoffs between OOP and functional patterns in Node, rather than only reciting definitions.
+- Show familiarity with SOLID principles in a Node context: SRP for services/controllers, OCP for extension points, DIP for pluggable modules.
+- Describe real-world patterns: repository layer, adapter layer, factory/service builder, dependency injection container, plugin APIs.
+- Connect OOP design to performance, debugging, and scaling: keep hot paths simple, avoid deep prototype chains in high-frequency code, and minimize class instantiation in request loops.
+- Provide examples of how OOP helped you maintain or refactor a backend system, especially in microservices or high-availability systems.
 
 ## Summary
 
