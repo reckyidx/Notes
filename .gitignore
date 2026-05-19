@@ -137,3 +137,8 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Interview Prep Site build artifacts
+interview-prep-site/node_modules/
+interview-prep-site/dist/
+interview-prep-site/.vite/
